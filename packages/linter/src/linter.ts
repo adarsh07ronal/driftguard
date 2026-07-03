@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import type { DesignSystem, LintFinding, LintReport } from "./types";
+import type { DesignSystem, LintFinding, LintReport, LintFixSuggestion } from "./types";
 
 export interface ParsedDoc {
   tokens: DesignSystem;
@@ -50,7 +50,8 @@ export function lintDesignMd(doc: ParsedDoc): LintReport {
     severity: LintFinding["severity"],
     rule: string,
     path: string,
-    message: string
+    message: string,
+    fix?: LintFixSuggestion
   ) => {
     const line = findYamlLine(yamlStr, path);
     findings.push({
@@ -59,6 +60,7 @@ export function lintDesignMd(doc: ParsedDoc): LintReport {
       path,
       message,
       line: line ? line + yamlLineOffset : undefined,
+      fix,
     });
   };
 
@@ -67,7 +69,12 @@ export function lintDesignMd(doc: ParsedDoc): LintReport {
       "error",
       "missing-colors",
       "colors",
-      "No colors defined. Add a colors section with at least a primary token."
+      "No colors defined. Add a colors section with at least a primary token.",
+      {
+        title: "Add a starter colors scale",
+        patch: `colors:\n  primary: \"#1976d2\"\n  background: \"#ffffff\"\n  surface: \"#f8fafc\"\n  on-primary: \"#ffffff\"`,
+        suggestion: `colors:\n  primary: \"#1976d2\"\n  background: \"#ffffff\"\n  surface: \"#f8fafc\"\n  on-primary: \"#ffffff\"`,
+      }
     );
     return buildReport(findings);
   }
@@ -77,7 +84,12 @@ export function lintDesignMd(doc: ParsedDoc): LintReport {
       "warning",
       "missing-primary",
       "colors.primary",
-      "No primary color defined — AI agents will auto-generate one, leading to inconsistent UIs."
+      "No primary color defined — AI agents will auto-generate one, leading to inconsistent UIs.",
+      {
+        title: "Add a primary color token",
+        patch: `primary: \"#1976d2\"`,
+        suggestion: `primary: \"#1976d2\"`,
+      }
     );
   }
 
@@ -167,7 +179,12 @@ export function lintDesignMd(doc: ParsedDoc): LintReport {
       "warning",
       "missing-typography",
       "typography",
-      "No typography tokens defined — agents will use default system fonts."
+      "No typography tokens defined — agents will use default system fonts.",
+      {
+        title: "Add starter typography tokens",
+        patch: `typography:\n  h1:\n    fontFamily: \"Inter\"\n    fontSize: \"40px\"\n    fontWeight: 700\n    lineHeight: \"1.2\"\n  body-md:\n    fontFamily: \"Inter\"\n    fontSize: \"16px\"\n    fontWeight: 400\n    lineHeight: \"1.5\"`,
+        suggestion: `typography:\n  h1:\n    fontFamily: \"Inter\"\n    fontSize: \"40px\"\n    fontWeight: 700\n    lineHeight: \"1.2\"\n  body-md:\n    fontFamily: \"Inter\"\n    fontSize: \"16px\"\n    fontWeight: 400\n    lineHeight: \"1.5\"`,
+      }
     );
   }
 

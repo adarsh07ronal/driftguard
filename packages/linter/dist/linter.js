@@ -45,7 +45,7 @@ function findYamlLine(yamlStr, path) {
 function lintDesignMd(doc) {
     const findings = [];
     const { tokens, yamlStr, yamlLineOffset } = doc;
-    const addFinding = (severity, rule, path, message) => {
+    const addFinding = (severity, rule, path, message, fix) => {
         const line = findYamlLine(yamlStr, path);
         findings.push({
             severity,
@@ -53,14 +53,23 @@ function lintDesignMd(doc) {
             path,
             message,
             line: line ? line + yamlLineOffset : undefined,
+            fix,
         });
     };
     if (!tokens.colors || Object.keys(tokens.colors).length === 0) {
-        addFinding("error", "missing-colors", "colors", "No colors defined. Add a colors section with at least a primary token.");
+        addFinding("error", "missing-colors", "colors", "No colors defined. Add a colors section with at least a primary token.", {
+            title: "Add a starter colors scale",
+            patch: `colors:\n  primary: \"#1976d2\"\n  background: \"#ffffff\"\n  surface: \"#f8fafc\"\n  on-primary: \"#ffffff\"`,
+            suggestion: `colors:\n  primary: \"#1976d2\"\n  background: \"#ffffff\"\n  surface: \"#f8fafc\"\n  on-primary: \"#ffffff\"`,
+        });
         return buildReport(findings);
     }
     if (!tokens.colors.primary) {
-        addFinding("warning", "missing-primary", "colors.primary", "No primary color defined — AI agents will auto-generate one, leading to inconsistent UIs.");
+        addFinding("warning", "missing-primary", "colors.primary", "No primary color defined — AI agents will auto-generate one, leading to inconsistent UIs.", {
+            title: "Add a primary color token",
+            patch: `primary: \"#1976d2\"`,
+            suggestion: `primary: \"#1976d2\"`,
+        });
     }
     function collectStringValues(obj, collected = []) {
         if (typeof obj === "string") {
@@ -125,7 +134,11 @@ function lintDesignMd(doc) {
         }
     }
     if (!tokens.typography || Object.keys(tokens.typography).length === 0) {
-        addFinding("warning", "missing-typography", "typography", "No typography tokens defined — agents will use default system fonts.");
+        addFinding("warning", "missing-typography", "typography", "No typography tokens defined — agents will use default system fonts.", {
+            title: "Add starter typography tokens",
+            patch: `typography:\n  h1:\n    fontFamily: \"Inter\"\n    fontSize: \"40px\"\n    fontWeight: 700\n    lineHeight: \"1.2\"\n  body-md:\n    fontFamily: \"Inter\"\n    fontSize: \"16px\"\n    fontWeight: 400\n    lineHeight: \"1.5\"`,
+            suggestion: `typography:\n  h1:\n    fontFamily: \"Inter\"\n    fontSize: \"40px\"\n    fontWeight: 700\n    lineHeight: \"1.2\"\n  body-md:\n    fontFamily: \"Inter\"\n    fontSize: \"16px\"\n    fontWeight: 400\n    lineHeight: \"1.5\"`,
+        });
     }
     if (!tokens.spacing || Object.keys(tokens.spacing).length === 0) {
         addFinding("info", "missing-sections", "spacing", "No spacing scale defined. Consider adding sm/md/lg tokens for consistent layout.");

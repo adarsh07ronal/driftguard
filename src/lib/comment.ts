@@ -33,6 +33,26 @@ function findingsTable(findings: LintFinding[]): string {
   return `\n${header}\n${rows.join("\n")}`;
 }
 
+function fixesSection(findings: LintFinding[]): string {
+  const fixable = findings.filter((f) => f.fix);
+  if (fixable.length === 0) return "";
+
+  const blocks = fixable.map((f) => {
+    const lineText = f.line ? ` (line ${f.line})` : "";
+    const title = f.fix?.title ?? "Suggested fix";
+    const patch = f.fix?.patch
+      ? `\n\nPaste-ready patch:\n\`\`\`yaml\n${f.fix.patch}\n\`\`\``
+      : "";
+    const suggestion = f.fix?.suggestion
+      ? `\n\nGitHub suggestion block (for review comments):\n\`\`\`suggestion\n${f.fix.suggestion}\n\`\`\``
+      : "";
+
+    return `#### ${title}\n- Rule: \`${f.rule}\`\n- Path: \`${f.path}\`${lineText}${patch}${suggestion}`;
+  });
+
+  return `\n\n### Apply Fix Suggestions\nThese are additive suggestions. Existing lint messages are unchanged.${blocks.join("\n\n")}`;
+}
+
 export function buildPRComment(
   report: LintReport,
   repoFullName: string,
@@ -108,6 +128,8 @@ ${summaryLine}`;
   if (infoFindings.length > 0) {
     body += `\n\n<details>\n<summary>Info (${infoFindings.length})</summary>\n${findingsTable(infoFindings)}\n</details>`;
   }
+
+  body += fixesSection(findings);
 
   body += `\n\n<sub>Powered by [driftguard.vercel.app](${APP_URL}) · [Edit design system](${editorUrl}) · [Dashboard](${dashboardUrl})</sub>`;
 

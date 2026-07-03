@@ -1,11 +1,20 @@
 export type LintSeverity = "error" | "warning" | "info";
 
+export interface LintFixSuggestion {
+  title: string;
+  // YAML block the user can paste into DESIGN.md
+  patch?: string;
+  // A GitHub suggestion block payload (best-effort; requires line-level review comments)
+  suggestion?: string;
+}
+
 export interface LintFinding {
   severity: LintSeverity;
   rule: string;
   path: string;
   message: string;
   line?: number;
+  fix?: LintFixSuggestion;
 }
 
 export interface LintReport {
