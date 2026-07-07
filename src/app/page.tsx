@@ -34,7 +34,7 @@ export default function HomePage() {
           <span className="text-muted-foreground">breaking your design system.</span>
         </h1>
         <p className="text-lg text-muted-foreground mb-10 max-w-xl mx-auto leading-relaxed">
-          Install once. Every pull request gets a DESIGN.md lint check — contrast ratios, token refs, typography, spacing. Catches drift before it merges.
+          Install once. Every pull request gets DESIGN.md + token validation — missing CSS tokens, value mismatches, unused tokens, contrast, and structure checks. Catches drift before it merges.
         </p>
         <div className="flex items-center justify-center gap-3">
           <a
@@ -71,7 +71,7 @@ export default function HomePage() {
             {
               step: "03",
               title: "Every PR gets checked",
-              sub: "Contrast, token refs, typography, section order — automatically.",
+              sub: "Token coverage, value mismatches, contrast, refs, and section order — automatically.",
             },
           ].map((s) => (
             <div key={s.step} className="border rounded-lg p-5">
@@ -97,20 +97,38 @@ export default function HomePage() {
           <div className="px-5 py-4 text-sm space-y-3">
             <p className="font-medium">designmd · Design system check ⚠️</p>
             <p className="text-muted-foreground text-xs">
-              <strong className="text-foreground">2 warnings</strong> · checked <code className="bg-muted px-1 rounded">DESIGN.md</code> at <code className="bg-muted px-1 rounded">a3f2c1b</code>
+              <strong className="text-foreground">2 errors</strong> · <strong className="text-foreground">1 warning</strong> · checked <code className="bg-muted px-1 rounded">DESIGN.md</code> at <code className="bg-muted px-1 rounded">a3f2c1b</code>
             </p>
             <div className="border rounded-lg overflow-hidden text-xs">
               <div className="grid grid-cols-[60px_140px_1fr] bg-muted px-3 py-2 text-muted-foreground gap-4 font-medium">
                 <span>Severity</span><span>Token path</span><span>Message</span>
               </div>
               {[
-                { sev: "🟡 warning", path: "components.button-primary", msg: "Contrast ratio 3.1:1 — below WCAG AA (4.5:1)" },
-                { sev: "🟡 warning", path: "typography", msg: "No typography tokens defined — agents will use default system fonts" },
+                {
+                  sev: "🔴 error",
+                  path: "colors.primary",
+                  msg: "Token value mismatch for colors.primary.",
+                  detail: "Expected: #1976d2 · Actual: #2196f3",
+                },
+                {
+                  sev: "🔴 error",
+                  path: "spacing.md",
+                  msg: "Design token spacing.md is not defined as a CSS variable.",
+                  detail: "Expected: --spacing-md",
+                },
+                {
+                  sev: "🟡 warning",
+                  path: "css.main-blue",
+                  msg: "CSS variable --main-blue is defined but not mapped from DESIGN.md tokens.",
+                },
               ].map((row, i) => (
                 <div key={i} className="grid grid-cols-[60px_140px_1fr] px-3 py-2 gap-4 border-t">
                   <span>{row.sev}</span>
                   <code className="text-muted-foreground">{row.path}</code>
-                  <span className="text-muted-foreground">{row.msg}</span>
+                  <div className="text-muted-foreground">
+                    <p>{row.msg}</p>
+                    {row.detail ? <p className="text-[11px] mt-0.5">{row.detail}</p> : null}
+                  </div>
                 </div>
               ))}
             </div>

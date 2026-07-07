@@ -7,7 +7,13 @@ import {
   findExistingComment,
   setCommitStatus,
 } from "@/lib/github";
-import { parseDesignMd, lintDesignMd } from "@/lib/linter";
+import {
+  parseDesignMd,
+  lintDesignMd,
+  extractCanonicalTokensFromDesignSystem,
+  extractCanonicalTokensFromCssVariables,
+  validateDesignTokensAgainstCss,
+} from "@/lib/linter";
 import { buildPRComment } from "@/lib/comment";
 import {
   upsertInstallation,
@@ -18,6 +24,13 @@ import {
   logPrCheck,
 } from "@/lib/db";
 import type { WebhookPayload } from "@/types";
+
+const CSS_TOKEN_PATH_CANDIDATES = [
+  "src/app/globals.css",
+  "app/globals.css",
+  "styles/globals.css",
+  "src/styles/globals.css",
+];
 
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -183,10 +196,44 @@ async function handlePullRequest(payload: WebhookPayload) {
       errors = 1;
     } else {
       const report = lintDesignMd(parsed);
-      errors = report.summary.errors;
-      warnings = report.summary.warnings;
 
-      commentBody = buildPRComment(report, repoFullName, sha, true, pull_request.html_url);
+      const cssContents = await Promise.all(
+        CSS_TOKEN_PATH_CANDIDATES.map((cssPath) =>
+          fetchFileContent(octokit, owner, repo, cssPath, ref)
+        )
+      );
+      const cssTokens = cssContents
+        .filter((c): c is string => Boolean(c))
+        .flatMap((c) => extractCanonicalTokensFromCssVariables(c));
+      const designTokens = extractCanonicalTokensFromDesignSystem(parsed.tokens);
+      const tokenReport = validateDesignTokensAgainstCss(designTokens, cssTokens);
+
+      const mergedReport = {
+        findings: [
+          ...report.findings,
+          ...tokenReport.findings.map((f) => ({
+            severity: f.severity,
+            rule: f.rule,
+            path: f.tokenPath,
+            message:
+              f.expected || f.actual
+                ? `${f.message}<br><sub>${[
+                    f.expected ? `<strong>Expected:</strong> \`${f.expected}\`` : null,
+                    f.actual ? `<strong>Actual:</strong> \`${f.actual}\`` : null,
+                  ].filter(Boolean).join(" · ")}</sub>`
+                : f.message,
+          })),
+        ],
+        summary: {
+          errors: report.summary.errors + tokenReport.summary.errors,
+          warnings: report.summary.warnings + tokenReport.summary.warnings,
+          info: report.summary.info + tokenReport.summary.info,
+        },
+      };
+      errors = mergedReport.summary.errors;
+      warnings = mergedReport.summary.warnings;
+
+      commentBody = buildPRComment(mergedReport, repoFullName, sha, true, pull_request.html_url);
 
       if (errors > 0) {
         statusState = monitoredRepo?.block_on_error ? "failure" : "success";
