@@ -105,7 +105,7 @@ export default function HomePage() {
               </div>
               {[
                 { sev: "🟡 warning", path: "components.button-primary", msg: "Contrast ratio 3.1:1 — below WCAG AA (4.5:1)" },
-                { sev: "🟡 warning", path: "colors.accent", msg: "Token defined but never referenced by any component" },
+                { sev: "🟡 warning", path: "typography", msg: "No typography tokens defined — agents will use default system fonts" },
               ].map((row, i) => (
                 <div key={i} className="grid grid-cols-[60px_140px_1fr] px-3 py-2 gap-4 border-t">
                   <span>{row.sev}</span>
@@ -113,6 +113,16 @@ export default function HomePage() {
                   <span className="text-muted-foreground">{row.msg}</span>
                 </div>
               ))}
+            </div>
+            <div className="border rounded-lg p-3 bg-muted/30 text-xs space-y-2">
+              <p className="font-medium text-foreground">Apply Fix Suggestions</p>
+              <p className="text-muted-foreground">
+                Existing lint messages stay. DriftGuard also adds a copy-ready fix and a GitHub suggestion block.
+              </p>
+              <div className="border rounded bg-background p-2">
+                <p className="text-[11px] text-muted-foreground mb-1">Suggested fix: add typography tokens</p>
+                <pre className="overflow-x-auto text-[11px]"><code>{`\`\`\`suggestion\ntypography:\n  h1:\n    fontFamily: "Inter"\n    fontSize: "40px"\n    fontWeight: 700\n    lineHeight: "1.2"\n  body-md:\n    fontFamily: "Inter"\n    fontSize: "16px"\n    fontWeight: 400\n    lineHeight: "1.5"\n\`\`\``}</code></pre>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">
               Powered by <a href="/" className="underline">driftguard.vercel.app</a> · <a href="/dashboard" className="underline">Dashboard</a>

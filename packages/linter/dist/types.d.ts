@@ -1,10 +1,16 @@
 export type LintSeverity = "error" | "warning" | "info";
+export interface LintFixSuggestion {
+    title: string;
+    patch?: string;
+    suggestion?: string;
+}
 export interface LintFinding {
     severity: LintSeverity;
     rule: string;
     path: string;
     message: string;
     line?: number;
+    fix?: LintFixSuggestion;
 }
 export interface LintReport {
     findings: LintFinding[];
