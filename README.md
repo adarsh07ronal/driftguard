@@ -14,11 +14,13 @@
 
 ## Screenshots
 
-**The check every PR gets** — this is the app's marketing page rendering the exact output of `buildPRComment()`, the same function that posts to real pull requests:
+Live captures from the production deployment and public listings — not mockups.
+
+**The check every PR gets** — the app's homepage rendering the exact output of `buildPRComment()`, the same function that posts to real pull requests:
 
 ![PR comment showing DESIGN.md lint findings](docs/screenshots/pr-comment-check.png)
 
-**Marketing homepage**, run locally via `npm run dev`:
+**Homepage** — [driftgaurd.vercel.app](https://driftgaurd.vercel.app):
 
 ![designmd marketing homepage](docs/screenshots/marketing-homepage.png)
 
@@ -26,7 +28,17 @@
 
 ![Install designmd page](docs/screenshots/install-page.png)
 
-*Captured from a local dev build (`npm run dev`) — the hosted production deployment sits behind Vercel's deployment protection, so these are pulled from the same source running locally rather than the live URL.*
+**Published on the VS Code Marketplace** — [driftgaurd.driftguard-vscode](https://marketplace.visualstudio.com/items?itemName=driftgaurd.driftguard-vscode):
+
+![DriftGuard VS Code extension listing on the Marketplace](docs/screenshots/vscode-marketplace-listing.png)
+
+**Published on GitHub Marketplace** — [github.com/marketplace/driftguard-app](https://github.com/marketplace/driftguard-app):
+
+![driftguard-app listing on GitHub Marketplace](docs/screenshots/github-marketplace-listing.png)
+
+**Public GitHub App listing** — [github.com/apps/driftguard-app](https://github.com/apps/driftguard-app):
+
+![driftguard-app public GitHub App page](docs/screenshots/github-app-listing.png)
 
 ---
 
