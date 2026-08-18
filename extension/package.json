@@ -6,6 +6,10 @@
   "publisher": "driftgaurd",
   "private": true,
   "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adarsh07ronal/driftguard"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -43,8 +47,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run bundle",
     "build": "tsc -p tsconfig.json",
+    "bundle": "node ./esbuild.js",
     "watch": "tsc -p tsconfig.json --watch",
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\""
   },
@@ -54,6 +59,7 @@
   "devDependencies": {
     "@types/node": "^20",
     "@types/vscode": "^1.85.0",
+    "esbuild": "^0.23.0",
     "typescript": "^5"
   }
 }

@@ -20,3 +20,4 @@ out/
 *.pem
 *.log
 npm-debug.log*
+*.vsix
