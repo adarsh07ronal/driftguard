@@ -1,0 +1,895 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DriftGuard — Architecture &amp; Design Deep Dive</title>
+<style>
+  :root {
+    --bg: #f1f2f4;
+    --surface: #ffffff;
+    --surface-2: #e8eaed;
+    --ink: #1b1f27;
+    --muted: #5b6472;
+    --faint: #8a93a3;
+    --line: #d8dbe1;
+    --accent: #b5691a;
+    --accent-ink: #ffffff;
+    --accent-soft: #f3e3d1;
+    --teal: #15776a;
+    --teal-soft: #dcefec;
+    --red: #b13a2f;
+    --red-soft: #f6e2df;
+    --blue: #2f5fa8;
+    --blue-soft: #e1e9f6;
+    --code-bg: #191d24;
+    --code-ink: #d9dee7;
+    --code-accent: #e0973a;
+    --shadow: 0 1px 2px rgba(20,22,28,.06), 0 8px 24px -12px rgba(20,22,28,.18);
+    --serif: ui-serif, Georgia, "Iowan Old Style", "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e1116;
+    --surface: #171b22;
+    --surface-2: #1e232b;
+    --ink: #e7e9ee;
+    --muted: #99a2b3;
+    --faint: #6b7383;
+    --line: #2a2f3a;
+    --accent: #e0973a;
+    --accent-ink: #171208;
+    --accent-soft: #3a2a15;
+    --teal: #4fc0ac;
+    --teal-soft: #123330;
+    --red: #e2685a;
+    --red-soft: #3a1f1c;
+    --blue: #7fa4e0;
+    --blue-soft: #1c2740;
+    --code-bg: #0b0d11;
+    --code-ink: #d9dee7;
+    --code-accent: #f0ac5c;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e1116;
+      --surface: #171b22;
+      --surface-2: #1e232b;
+      --ink: #e7e9ee;
+      --muted: #99a2b3;
+      --faint: #6b7383;
+      --line: #2a2f3a;
+      --accent: #e0973a;
+      --accent-ink: #171208;
+      --accent-soft: #3a2a15;
+      --teal: #4fc0ac;
+      --teal-soft: #123330;
+      --red: #e2685a;
+      --red-soft: #3a1f1c;
+      --blue: #7fa4e0;
+      --blue-soft: #1c2740;
+      --code-bg: #0b0d11;
+      --code-ink: #d9dee7;
+      --code-accent: #f0ac5c;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 16.5px;
+    line-height: 1.65;
+  }
+
+  a { color: var(--accent); text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+  a:hover { text-decoration-color: var(--accent); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  code, pre, .mono { font-family: var(--mono); }
+
+  /* ---------- layout shell ---------- */
+  .shell {
+    display: grid;
+    grid-template-columns: 264px minmax(0, 1fr);
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    padding: 28px 20px 40px;
+  }
+  .sidebar::-webkit-scrollbar { width: 8px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 1.05rem;
+    margin-bottom: 2px;
+  }
+  .brand .mark { color: var(--accent); }
+  .brand-sub {
+    font-family: var(--sans);
+    font-size: 0.72rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 22px;
+  }
+
+  .navgroup { margin-bottom: 4px; }
+  .navgroup-label {
+    font-family: var(--sans);
+    font-size: 0.68rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 20px 0 6px;
+  }
+  .navlink {
+    display: block;
+    font-family: var(--sans);
+    font-size: 0.87rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 5px 8px;
+    border-radius: 6px;
+    border-left: 2px solid transparent;
+  }
+  .navlink:hover { color: var(--ink); background: var(--surface-2); }
+
+  .repo-pill {
+    margin-top: 26px;
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-decoration: none;
+    box-shadow: var(--shadow);
+  }
+  .repo-pill:hover { border-color: var(--accent); color: var(--ink); }
+  .repo-pill b { display: block; font-family: var(--sans); color: var(--ink); font-size: 0.85rem; margin-bottom: 2px; }
+
+  main { padding: 48px 56px 120px; min-width: 0; }
+  @media (max-width: 640px) { main { padding: 32px 20px 90px; } }
+
+  .kicker {
+    font-family: var(--sans);
+    font-size: 0.74rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1.title {
+    font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+    margin: 0 0 14px;
+    line-height: 1.15;
+  }
+  .dek {
+    font-family: var(--serif);
+    font-size: 1.12rem;
+    color: var(--muted);
+    max-width: 62ch;
+    margin: 0 0 8px;
+  }
+  .byline {
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    color: var(--faint);
+    margin: 18px 0 44px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  section { margin-bottom: 62px; scroll-margin-top: 24px; }
+  section h2 {
+    font-size: 1.5rem;
+    margin: 0 0 6px;
+    padding-top: 6px;
+  }
+  section .section-num {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--faint);
+    display: block;
+    margin-bottom: 4px;
+  }
+  section > .lede {
+    color: var(--muted);
+    max-width: 68ch;
+    margin: 0 0 24px;
+    font-size: 1.02rem;
+  }
+  h3 { font-size: 1.12rem; margin: 30px 0 10px; }
+  h4 { font-size: 0.95rem; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-size: 0.78rem; }
+
+  p { max-width: 68ch; margin: 0 0 14px; }
+  ul, ol { max-width: 68ch; padding-left: 1.3em; margin: 0 0 16px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--accent); }
+
+  strong { color: var(--ink); font-weight: 700; }
+
+  .cite { font-family: var(--mono); font-size: 0.86em; background: var(--surface-2); padding: 0.1em 0.4em; border-radius: 4px; color: var(--ink); white-space: nowrap; }
+
+  /* ---------- callouts (reuse the product's own severity language) ---------- */
+  .callout {
+    display: flex;
+    gap: 12px;
+    max-width: 68ch;
+    padding: 14px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    margin: 18px 0 22px;
+    font-size: 0.95rem;
+  }
+  .callout .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; margin-top: 7px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout-decision { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+  .callout-decision .dot { background: var(--accent); }
+  .callout-tradeoff { background: var(--red-soft); border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
+  .callout-tradeoff .dot { background: var(--red); }
+  .callout-note { background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 30%, var(--line)); }
+  .callout-note .dot { background: var(--blue); }
+  .callout-label { font-family: var(--sans); font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; display: block; margin-bottom: 4px; }
+  .callout-decision .callout-label { color: color-mix(in srgb, var(--accent) 80%, black); }
+  :root[data-theme="dark"] .callout-decision .callout-label,
+  @media (prefers-color-scheme: dark) { .callout-decision .callout-label { color: var(--accent); } }
+  .callout-tradeoff .callout-label { color: var(--red); }
+  .callout-note .callout-label { color: var(--blue); }
+
+  /* ---------- code blocks ---------- */
+  .codewrap { max-width: 100%; overflow-x: auto; margin: 16px 0 22px; border-radius: 10px; box-shadow: var(--shadow); }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    margin: 0;
+    padding: 16px 18px;
+    font-size: 0.84rem;
+    line-height: 1.6;
+    min-width: max-content;
+  }
+  .codelabel {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--faint);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-bottom: none;
+    padding: 6px 12px;
+    border-radius: 10px 10px 0 0;
+    display: inline-block;
+  }
+  .codewrap-labeled pre { border-radius: 0 10px 10px 10px; }
+  .tok-kw { color: #e0973a; } .tok-str { color: #8fbf7f; } .tok-com { color: #6b7383; } .tok-fn { color: #7fa4e0; }
+
+  /* ---------- tables ---------- */
+  .tablewrap { max-width: 100%; overflow-x: auto; margin: 16px 0 24px; }
+  table { border-collapse: collapse; width: 100%; min-width: 480px; font-size: 0.9rem; font-family: var(--sans); }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 600; }
+  td { color: var(--ink); }
+  td.dim { color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  .sev { display: inline-block; font-family: var(--mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .sev-error { background: var(--red-soft); color: var(--red); }
+  .sev-warn { background: var(--accent-soft); color: color-mix(in srgb, var(--accent) 85%, black); }
+  :root[data-theme="dark"] .sev-warn, @media (prefers-color-scheme: dark){ .sev-warn { color: var(--accent); } }
+  .sev-info { background: var(--blue-soft); color: var(--blue); }
+
+  /* ---------- pipeline / flow diagram ---------- */
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    overflow-x: auto;
+    padding: 4px 2px 14px;
+    margin: 20px 0 8px;
+  }
+  .flow-step {
+    flex: none;
+    width: 168px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 13px;
+    box-shadow: var(--shadow);
+  }
+  .flow-step .n { font-family: var(--mono); font-size: 0.68rem; color: var(--accent); display: block; margin-bottom: 4px; }
+  .flow-step .t { font-family: var(--sans); font-weight: 700; font-size: 0.84rem; margin-bottom: 4px; }
+  .flow-step .d { font-family: var(--sans); font-size: 0.74rem; color: var(--muted); line-height: 1.4; }
+  .flow-arrow { flex: none; width: 30px; display: flex; align-items: center; justify-content: center; color: var(--faint); font-size: 1.1rem; }
+
+  /* ---------- architecture diagram ---------- */
+  .arch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 20px 0 8px;
+  }
+  @media (max-width: 700px) { .arch { grid-template-columns: 1fr; } }
+  .arch-box {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 16px 14px;
+    box-shadow: var(--shadow);
+  }
+  .arch-box h4 { margin-top: 0; color: var(--ink); font-size: 0.8rem; letter-spacing: .02em; }
+  .arch-box ul { margin: 0; padding-left: 1.1em; font-size: 0.82rem; }
+  .arch-box li { margin-bottom: 4px; color: var(--muted); }
+  .arch-box .tag { font-family: var(--mono); font-size: 0.68rem; color: var(--accent); }
+
+  /* ---------- ER-ish table relationships ---------- */
+  .er {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 18px 0 6px;
+  }
+  @media (max-width: 640px) { .er { grid-template-columns: 1fr; } }
+  .er-table {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  .er-table .hd {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: var(--surface-2);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .er-table ul { list-style: none; margin: 0; padding: 8px 12px; font-family: var(--mono); font-size: 0.76rem; }
+  .er-table li { margin-bottom: 3px; color: var(--muted); }
+  .er-table li b { color: var(--ink); font-weight: 600; }
+  .er-table li .fk { color: var(--teal); }
+
+  /* ---------- roadmap ---------- */
+  .roadmap { display: grid; gap: 12px; margin: 18px 0; }
+  .road-item {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 13px 15px;
+    background: var(--surface);
+  }
+  .road-item .idx { font-family: var(--mono); color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+  .road-item h4 { margin: 0 0 4px; text-transform: none; letter-spacing: 0; font-size: 0.95rem; color: var(--ink); font-family: var(--sans); font-weight: 700; }
+  .road-item p { margin: 0; font-size: 0.88rem; color: var(--muted); }
+  .road-item .evidence { display: inline-block; margin-top: 6px; font-family: var(--mono); font-size: 0.72rem; color: var(--teal); background: var(--teal-soft); padding: 2px 8px; border-radius: 6px; }
+
+  /* ---------- qa ---------- */
+  .qa { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: var(--surface); overflow: hidden; }
+  .qa summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 13px 16px;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 0.92rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .qa summary::-webkit-details-marker { display: none; }
+  .qa summary::before { content: "›"; font-family: var(--mono); color: var(--accent); font-size: 1.1rem; transition: transform .15s; }
+  .qa[open] summary::before { transform: rotate(90deg); }
+  .qa .a { padding: 0 16px 16px 42px; font-size: 0.9rem; color: var(--muted); }
+  .qa .a p:last-child { margin-bottom: 0; }
+
+  footer {
+    max-width: 68ch;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    color: var(--faint);
+    font-family: var(--sans);
+    font-size: 0.78rem;
+  }
+
+  .backtotop { display: inline-block; margin-top: 40px; font-family: var(--sans); font-size: 0.8rem; color: var(--muted); text-decoration: none; }
+</style>
+
+<div class="shell">
+  <nav class="sidebar" aria-label="Sections">
+    <div class="brand"><span class="mark">◆</span> DriftGuard</div>
+    <p class="brand-sub">Architecture notes</p>
+
+    <div class="navgroup">
+      <a class="navlink" href="#overview">Overview</a>
+      <a class="navlink" href="#why">Why it matters</a>
+    </div>
+    <div class="navgroup">
+      <p class="navgroup-label">System</p>
+      <a class="navlink" href="#architecture">Architecture</a>
+      <a class="navlink" href="#stack">Tech stack</a>
+      <a class="navlink" href="#dataflow">PR check — data flow</a>
+      <a class="navlink" href="#auth-flow">Auth flow</a>
+    </div>
+    <div class="navgroup">
+      <p class="navgroup-label">Design</p>
+      <a class="navlink" href="#patterns">Patterns</a>
+      <a class="navlink" href="#decisions">Decisions &amp; trade-offs</a>
+      <a class="navlink" href="#linter">Linter internals</a>
+      <a class="navlink" href="#data-model">Data model</a>
+    </div>
+    <div class="navgroup">
+      <p class="navgroup-label">Forward</p>
+      <a class="navlink" href="#roadmap">Expansion roadmap</a>
+      <a class="navlink" href="#interview">Interview cheat sheet</a>
+    </div>
+
+    <a class="repo-pill" href="https://github.com/adarsh07ronal/driftguard" target="_blank" rel="noopener">
+      <b>adarsh07ronal/driftguard</b>
+      GitHub App · Next.js 14 · Supabase
+    </a>
+  </nav>
+
+  <main>
+    <p class="kicker">Interview prep · system deep-dive</p>
+    <h1 class="title">DriftGuard: a GitHub App that keeps DESIGN.md honest</h1>
+    <p class="dek">A working-notes reference on how the app is built, why each piece is shaped the way it is, and where it goes next — written to be read once before a system-design interview and skimmed the day of.</p>
+    <p class="byline">Design system linter · GitHub App + Next.js + Supabase · monorepo with a shared <code>@driftguard/linter</code> package and a VS Code extension</p>
+
+    <!-- ============ OVERVIEW ============ -->
+    <section id="overview">
+      <span class="section-num">01</span>
+      <h2>Overview</h2>
+      <p class="lede">What the product is, in one pass.</p>
+
+      <p><strong>DriftGuard</strong> (package name <code class="cite">designmd</code>) enforces a repo's <code class="cite">DESIGN.md</code> — a markdown file with a YAML front-matter block describing colors, typography, spacing, and component tokens — on every pull request. It ships three surfaces that all share one core:</p>
+
+      <ul>
+        <li>a <strong>GitHub App</strong> (Next.js on Vercel) that lints <code class="cite">DESIGN.md</code> on every PR, posts a findings comment, and sets a commit status;</li>
+        <li>a <strong>VS Code extension</strong> that runs the same lint rules live, as you type;</li>
+        <li>a <strong>dashboard</strong> (Supabase-backed) showing connected repos and recent PR check history.</li>
+      </ul>
+
+      <p>The interesting engineering problem isn't parsing YAML — it's that DriftGuard checks two things at once: is <code class="cite">DESIGN.md</code> internally well-formed (valid references, WCAG contrast, required sections), <em>and</em> does it still match the CSS custom properties actually shipped in the codebase. That second check is the drift the name refers to.</p>
+    </section>
+
+    <!-- ============ WHY ============ -->
+    <section id="why">
+      <span class="section-num">02</span>
+      <h2>Why it matters</h2>
+      <p class="lede">The problem this is actually solving, and why it's timely.</p>
+
+      <p>AI coding agents (Cursor, Copilot, Claude Code) generate UI code fast, but they invent design decisions — a slightly different blue, an off-scale spacing value — whenever they aren't given a source of truth to read. <code class="cite">DESIGN.md</code> is a bet that the source of truth agents will actually respect is a markdown file sitting in the repo root, because that's exactly the kind of file agents already read by convention.</p>
+
+      <p>A file that nobody enforces just decays. Someone tweaks a CSS variable during a rushed PR and never updates the spec; six months later the spec describes a design system the product no longer has, and the AI agents that were supposed to be reading it are now reading something wrong with total confidence. DriftGuard is CI for that file — the same category of tool as ESLint or a type checker, except the "type" being checked is <em>brand identity</em> rather than code shape.</p>
+
+      <div class="callout callout-note">
+        <span class="dot"></span>
+        <div><span class="callout-label">Framing for an interview</span><p>"It's a drift detector between two sources of truth that are supposed to agree — a declared spec and a shipped implementation — which is the same shape of problem as schema drift, infra drift, or contract testing between a client and server. I happened to apply it to design tokens."</p></div>
+      </div>
+    </section>
+
+    <!-- ============ ARCHITECTURE ============ -->
+    <section id="architecture">
+      <span class="section-num">03</span>
+      <h2>Architecture</h2>
+      <p class="lede">An npm-workspaces monorepo with one shared core and three thin adapters around it.</p>
+
+      <div class="arch">
+        <div class="arch-box">
+          <span class="tag">apps/</span>
+          <h4>Next.js 14 App Router — <code class="cite">src/app</code></h4>
+          <ul>
+            <li>Marketing site + GitHub OAuth login (via Supabase)</li>
+            <li>Dashboard (React Server Component reading Supabase)</li>
+            <li><code class="cite">/api/github/webhook</code> — the core route</li>
+            <li><code class="cite">/api/auth/login</code>, <code class="cite">/auth/callback</code></li>
+            <li>Deployed on Vercel as serverless functions</li>
+          </ul>
+        </div>
+        <div class="arch-box">
+          <span class="tag">packages/linter</span>
+          <h4>@driftguard/linter — shared core</h4>
+          <ul>
+            <li>Pure functions: no filesystem, no network</li>
+            <li><code class="cite">parseDesignMd</code>, <code class="cite">lintDesignMd</code></li>
+            <li>Token canonicalization + CSS cross-validation</li>
+            <li>Consumed by <em>both</em> the webhook handler and the VS Code extension — one rule engine, not two</li>
+          </ul>
+        </div>
+        <div class="arch-box">
+          <span class="tag">extension/</span>
+          <h4>VS Code extension</h4>
+          <ul>
+            <li>Thin adapter: <code class="cite">LintFinding → vscode.Diagnostic</code></li>
+            <li>Debounced on-type linting (300ms default)</li>
+            <li>Same rule engine as the webhook — findings you see locally are exactly what CI will report</li>
+          </ul>
+        </div>
+      </div>
+
+      <p>External integrations sit around that core: <strong>GitHub</strong> via <code class="cite">@octokit/rest</code> and <code class="cite">@octokit/auth-app</code> (installation-scoped tokens, not a static PAT), <strong>Supabase</strong> for Postgres + Auth + Row Level Security, and <strong>Vercel</strong> for hosting. Two dependencies are already installed but not yet wired up — <code class="cite">@anthropic-ai/sdk</code> and <code class="cite">stripe</code> — see <a href="#roadmap">Expansion roadmap</a>.</p>
+    </section>
+
+    <!-- ============ STACK ============ -->
+    <section id="stack">
+      <span class="section-num">04</span>
+      <h2>Tech stack</h2>
+      <p class="lede">What's actually doing work, versus what's staged for later.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Layer</th><th>Choice</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td>Framework</td><td class="mono">Next.js 14 (App Router)</td><td class="dim">Route handlers double as the webhook receiver and OAuth endpoints; Server Components render the dashboard directly against Supabase</td></tr>
+            <tr><td>Language</td><td class="mono">TypeScript</td><td class="dim">Shared types (<span class="mono">LintFinding</span>, <span class="mono">DesignSystem</span>) flow from the linter package into both the app and the extension</td></tr>
+            <tr><td>Auth + DB</td><td class="mono">Supabase</td><td class="dim">Postgres, GitHub OAuth, Row Level Security</td></tr>
+            <tr><td>GitHub integration</td><td class="mono">Octokit + auth-app</td><td class="dim">JWT-signed app auth → short-lived installation tokens</td></tr>
+            <tr><td>YAML</td><td class="mono">js-yaml</td><td class="dim">Parses the DESIGN.md front-matter block</td></tr>
+            <tr><td>Hosting</td><td class="mono">Vercel</td><td class="dim">Serverless functions for the webhook + app</td></tr>
+            <tr><td>Monorepo</td><td class="mono">npm workspaces</td><td class="dim"><span class="mono">packages/*</span> + <span class="mono">extension</span> alongside the root app</td></tr>
+            <tr><td>Styling</td><td class="mono">Tailwind CSS</td><td class="dim">Dashboard and marketing UI</td></tr>
+            <tr><td>Client state</td><td class="mono">Zustand <span class="sev sev-info">staged</span></td><td class="dim">Present, no consumer yet in the shipped app — likely for the planned editor UI</td></tr>
+            <tr><td>AI</td><td class="mono">@anthropic-ai/sdk <span class="sev sev-info">staged</span></td><td class="dim">Referenced by copy in <span class="mono">comment.ts</span> ("Open the DESIGN.md editor") — route not yet built</td></tr>
+            <tr><td>Billing</td><td class="mono">Stripe <span class="sev sev-info">staged</span></td><td class="dim"><span class="mono">profiles.plan</span> column exists; no checkout flow yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ DATA FLOW ============ -->
+    <section id="dataflow">
+      <span class="section-num">05</span>
+      <h2>PR check — data flow</h2>
+      <p class="lede">The core path, traced through <code class="cite">src/app/api/github/webhook/route.ts</code>.</p>
+
+      <div class="flow">
+        <div class="flow-step"><span class="n">01</span><div class="t">Verify signature</div><div class="d">HMAC-SHA256 over the raw body, constant-time compare. Reject with 401 before touching JSON.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">02</span><div class="t">Route by event</div><div class="d"><span class="mono">installation</span> / <span class="mono">installation_repositories</span> / <span class="mono">pull_request</span>; filter to opened, synchronize, reopened.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">03</span><div class="t">Get installation token</div><div class="d">App JWT → short-lived Octokit client scoped to just this installation.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">04</span><div class="t">Set status: pending</div><div class="d">Posted immediately so the PR shows a check is running.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">05</span><div class="t">Fetch DESIGN.md</div><div class="d">From the PR's <em>head ref</em> — lints the code as it will exist after merge, not current main.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">06</span><div class="t">Parse + lint</div><div class="d">YAML front-matter parsed, then structural rules run (missing tokens, broken refs, contrast, section order).</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">07</span><div class="t">Cross-check CSS</div><div class="d">Fetches candidate <span class="mono">globals.css</span> paths in parallel, diffs tokens against declared <span class="mono">:root</span> variables.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">08</span><div class="t">Build comment</div><div class="d">Findings formatted into a markdown table + paste-ready fix patches.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">09</span><div class="t">Upsert + log</div><div class="d">Comment updated in place (not reposted), status set, check row written to Postgres — comment + status run concurrently.</div></div>
+      </div>
+
+      <h3>The branching logic that decides the outcome</h3>
+      <p>Three distinct paths, each producing a different comment and commit-status state:</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Condition</th><th>Comment</th><th>Commit status</th></tr></thead>
+          <tbody>
+            <tr><td>No <span class="mono">DESIGN.md</span> at repo root</td><td class="dim">Onboarding message linking the (planned) editor</td><td><span class="sev sev-info">no_file</span></td></tr>
+            <tr><td>YAML front-matter malformed</td><td class="dim">Single <span class="mono">parse-error</span> finding</td><td><span class="sev sev-error">failure</span></td></tr>
+            <tr><td>Parses, has errors</td><td class="dim">Findings table + fix suggestions</td><td><span class="sev sev-warn">failure only if repo opted into block_on_error</span></td></tr>
+            <tr><td>Parses, warnings only</td><td class="dim">Findings table</td><td><span class="sev sev-info">success</span></td></tr>
+            <tr><td>Clean</td><td class="dim">"All checks passed"</td><td><span class="sev sev-info">success</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout callout-decision">
+        <span class="dot"></span>
+        <div><span class="callout-label">Product decision</span><p>Errors don't block merges by default — <span class="mono">monitoredRepo?.block_on_error</span> has to be explicitly true. Advisory-by-default reduces adoption friction for a team's first week using the tool; blocking is opt-in once they trust the signal.</p></div>
+      </div>
+
+      <div class="callout callout-tradeoff">
+        <span class="dot"></span>
+        <div><span class="callout-label">Known gap</span><p><span class="mono">logPrCheck</span> runs last. If the handler throws partway through, GitHub gets a 500 (and retries), but no row is written to <span class="mono">pr_checks</span> — there's no durable queue or dead-letter path yet, so a failed run leaves no audit trail. Worth naming unprompted in an interview; see <a href="#roadmap">roadmap #6</a>.</p></div>
+      </div>
+    </section>
+
+    <!-- ============ AUTH FLOW ============ -->
+    <section id="auth-flow">
+      <span class="section-num">06</span>
+      <h2>Auth flow — and the PKCE detour</h2>
+      <p class="lede">The one place a "correct" default had to be abandoned for a concrete, reproducible failure.</p>
+
+      <div class="flow">
+        <div class="flow-step"><span class="n">1</span><div class="t">/api/auth/login</div><div class="d">Route handler calls Supabase directly with <span class="mono">flowType: 'implicit'</span>, gets the GitHub OAuth URL, redirects.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">2</span><div class="t">GitHub → Supabase</div><div class="d">User authorizes; Supabase completes the OAuth exchange on its own domain.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">3</span><div class="t">/auth/callback</div><div class="d">Client page parses <span class="mono">#access_token</span> straight out of the URL hash — no server round trip.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">4</span><div class="t">setSession()</div><div class="d">Browser Supabase client stores the session in cookies via <span class="mono">@supabase/ssr</span>.</div></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><span class="n">5</span><div class="t">Dashboard</div><div class="d">Middleware refreshes the session cookie on every request after this.</div></div>
+      </div>
+
+      <p>The first implementation used <code class="cite">createServerClient</code> with PKCE — the modern, recommended default. It kept failing: the <code class="cite">code_verifier</code> cookie set before the redirect to GitHub wasn't surviving the trip back from <code class="cite">supabase.co</code> to the <code class="cite">vercel.app</code> domain. That's a cross-site cookie problem (<code class="cite">SameSite</code> behavior), and it didn't matter which storage mechanism carried the verifier — route handler, server action, browser client — it was lost on every attempt.</p>
+
+      <p>The fix: switch to Supabase's <code class="cite">implicit</code> flow, which returns the access token directly in the URL fragment instead of an exchange code, so there's no verifier cookie to lose in the first place.</p>
+
+      <div class="callout callout-tradeoff">
+        <span class="dot"></span>
+        <div><span class="callout-label">Trade-off, stated plainly</span><p>Implicit flow is generally considered less secure than PKCE — the token briefly lives in the URL fragment and browser history. It was the pragmatic fix for a real, reproduced cross-domain cookie failure, not a default choice. A cleaner long-term fix would be putting Supabase auth behind a same-site custom domain so the verifier cookie never has to cross origins.</p></div>
+      </div>
+    </section>
+
+    <!-- ============ PATTERNS ============ -->
+    <section id="patterns">
+      <span class="section-num">07</span>
+      <h2>Design patterns in play</h2>
+      <p class="lede">Named less for the pattern-catalog label, more for the problem each one is actually solving here.</p>
+
+      <h3>Canonicalize, then diff</h3>
+      <p>Both <code class="cite">DESIGN.md</code> tokens and CSS <code class="cite">:root</code> variables get normalized into one shared <code class="cite">CanonicalToken</code> shape (<code class="cite">extractCanonicalTokensFromDesignSystem</code> / <code class="cite">…FromCssVariables</code>) — same fields, same hex normalization — <em>before</em> comparison. This is the general technique behind most config-drift and schema-drift tooling: don't write N×M comparison logic between two formats, write two adapters into one shape and diff that.</p>
+
+      <div class="codewrap codewrap-labeled">
+        <span class="codelabel">packages/linter/src/token-validation.ts</span>
+        <pre><span class="tok-com">// design token path → plausible CSS variable name(s), tried in order</span>
+<span class="tok-kw">function</span> designTokenToCssVarCandidates(path: <span class="tok-kw">string</span>): <span class="tok-kw">string</span>[] {
+  <span class="tok-kw">const</span> [group, ...rest] = path.split(<span class="tok-str">"."</span>);
+  <span class="tok-kw">if</span> (group === <span class="tok-str">"colors"</span>) <span class="tok-kw">return</span> [toKebab(rest.join(<span class="tok-str">"-"</span>))];
+  <span class="tok-kw">if</span> (group === <span class="tok-str">"spacing"</span>) <span class="tok-kw">return</span> [<span class="tok-str">`spacing-${toKebab(rest.join("-"))}`</span>];
+  <span class="tok-kw">if</span> (group === <span class="tok-str">"rounded"</span>) <span class="tok-kw">return</span> [<span class="tok-str">`rounded-${tail}`</span>, <span class="tok-str">`radius-${tail}`</span>]; <span class="tok-com">// try both</span>
+  <span class="tok-kw">return</span> [toKebab(path.replace(<span class="tok-str">/\./g</span>, <span class="tok-str">"-"</span>))];
+}</pre>
+      </div>
+      <p>Naming conventions between a YAML spec and a CSS file are never guaranteed to line up exactly, so the matcher tries several plausible candidates rather than demanding one rigid mapping — heuristic matching over an exact contract.</p>
+
+      <h3>Rule list, not a plugin registry</h3>
+      <p><code class="cite">lintDesignMd</code> is a sequence of independent <code class="cite">addFinding(...)</code> calls appended to one array — not a formal rule-plugin system with a registry and lifecycle hooks. With roughly a dozen fixed rules, a registry would be speculative generality; a straight-line function is easier to read top to bottom and just as easy to extend by adding one more check.</p>
+
+      <h3>Idempotency at every integration boundary</h3>
+      <p>Webhooks redeliver. Every handler that touches external state is written to be safely re-run:</p>
+      <ul>
+        <li><code class="cite">upsertMonitoredRepo</code> checks for an existing row by <code class="cite">repo_id</code> before inserting</li>
+        <li>PR comments are found via a hidden marker (<code class="cite">&lt;!-- designmd-bot --&gt;</code>) and <em>updated in place</em> instead of reposted — the same idiom Renovate and Dependabot use to avoid spamming a PR thread</li>
+        <li>Commit status is just re-set on every delivery — status updates are naturally idempotent</li>
+      </ul>
+
+      <h3>Two Supabase clients, two trust levels</h3>
+      <p>User-facing reads (the dashboard) go through <code class="cite">createServerSupabaseClient</code>, which is cookie-scoped and respects Row Level Security. Server-only code (the webhook) goes through <code class="cite">createServiceClient</code>, which uses the service-role key and bypasses RLS entirely. The service-role client is never constructed anywhere that runs in the browser — the standard Supabase boundary for "trusted server code" vs. "authenticated user."</p>
+
+      <h3>Fail open on incomplete config</h3>
+      <p>Right after a fresh install, a PR can arrive before the <code class="cite">monitored_repos</code> row exists. <code class="cite">getMonitoredRepo</code> can return <code class="cite">null</code>, and the check still runs — it just can't block the merge (<code class="cite">block_on_error</code> defaults to off in that case). The tool chooses "always give feedback" over "only work if perfectly configured."</p>
+    </section>
+
+    <!-- ============ DECISIONS ============ -->
+    <section id="decisions">
+      <span class="section-num">08</span>
+      <h2>Decisions &amp; trade-offs, condensed</h2>
+      <p class="lede">The kind of thing worth having a crisp two-sentence answer for.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Decision</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>Implicit OAuth flow, not PKCE</td><td class="dim">code_verifier cookie didn't survive the supabase.co → vercel.app redirect; see <a href="#auth-flow">Auth flow</a></td></tr>
+            <tr><td>Lint errors don't block merges by default</td><td class="dim">Advisory-first reduces friction for new adopters; blocking is per-repo opt-in</td></tr>
+            <tr><td>CSS token discovery uses a fixed candidate path list</td><td class="dim">Zero-config first run over configurability — trades completeness for "it just works" on a typical Next.js layout</td></tr>
+            <tr><td>Shared linter package used by both server and editor</td><td class="dim">One rule engine means the diagnostics you see in VS Code are guaranteed to match what CI reports — no drift between the drift-checker's own two surfaces</td></tr>
+            <tr><td>Contrast ratio implemented from scratch</td><td class="dim">Small, self-contained sRGB-luminance formula — not worth a dependency for one WCAG calculation</td></tr>
+            <tr><td>RLS policies are <span class="mono">using (true)</span> on three tables</td><td class="dim">Correct today only because those tables are exclusively touched via the service-role client — a real gap if that assumption is ever violated; see <a href="#roadmap">roadmap #9</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ LINTER ============ -->
+    <section id="linter">
+      <span class="section-num">09</span>
+      <h2>Linter internals</h2>
+      <p class="lede">The part of the codebase with the most going on per line.</p>
+
+      <h3>Rules implemented</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Rule</th><th>Severity</th><th>Checks</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">missing-colors</td><td><span class="sev sev-error">error</span></td><td class="dim">No <span class="mono">colors:</span> section at all</td></tr>
+            <tr><td class="mono">missing-primary</td><td><span class="sev sev-warn">warning</span></td><td class="dim">No primary color — agents will invent one</td></tr>
+            <tr><td class="mono">broken-ref</td><td><span class="sev sev-error">error</span></td><td class="dim">A <span class="mono">{x.y}</span> token reference doesn't resolve</td></tr>
+            <tr><td class="mono">contrast-ratio</td><td><span class="sev sev-warn">warning</span></td><td class="dim">Component bg/fg below WCAG AA (4.5:1)</td></tr>
+            <tr><td class="mono">orphaned-tokens</td><td><span class="sev sev-info">info</span></td><td class="dim">Color defined but never referenced by a component</td></tr>
+            <tr><td class="mono">missing-token-in-css</td><td><span class="sev sev-error">error</span></td><td class="dim">DESIGN.md token has no matching CSS variable</td></tr>
+            <tr><td class="mono">token-value-mismatch</td><td><span class="sev sev-error">error</span></td><td class="dim">CSS variable exists but its value disagrees with the spec</td></tr>
+            <tr><td class="mono">unused-css-token</td><td><span class="sev sev-warn">warning</span></td><td class="dim">CSS variable exists with no corresponding DESIGN.md token</td></tr>
+            <tr><td class="mono">missing-typography</td><td><span class="sev sev-warn">warning</span></td><td class="dim">No typography tokens defined</td></tr>
+            <tr><td class="mono">section-order</td><td><span class="sev sev-warn">warning</span></td><td class="dim">Headings out of canonical order</td></tr>
+            <tr><td class="mono">parse-error</td><td><span class="sev sev-error">error</span></td><td class="dim">YAML front matter malformed</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Line-accurate findings without a source-mapping YAML parser</h3>
+      <p><code class="cite">js-yaml</code> gives back parsed values, not line numbers. <code class="cite">findYamlLine</code> re-walks the raw YAML text separately, matching each finding's dot-path against indentation depth (assuming 2-space indent) to recover a line number — needed so VS Code can underline the right line and GitHub comments can deep-link to it.</p>
+
+      <h3>WCAG contrast, by hand</h3>
+      <p>Relative luminance (sRGB gamma correction) and the contrast-ratio formula are implemented directly rather than pulled in as a dependency — small enough, and self-contained enough, to just write:</p>
+      <div class="codewrap codewrap-labeled">
+        <span class="codelabel">packages/linter/src/linter.ts</span>
+        <pre><span class="tok-kw">function</span> contrastRatio(bg: <span class="tok-kw">string</span>, fg: <span class="tok-kw">string</span>): <span class="tok-kw">number</span> | <span class="tok-kw">null</span> {
+  <span class="tok-kw">const</span> l1 = hexToLuminance(bg), l2 = hexToLuminance(fg);
+  <span class="tok-kw">const</span> lighter = Math.max(l1, l2), darker = Math.min(l1, l2);
+  <span class="tok-kw">return</span> (lighter + <span class="tok-str">0.05</span>) / (darker + <span class="tok-str">0.05</span>); <span class="tok-com">// WCAG AA threshold: 4.5</span>
+}</pre>
+      </div>
+    </section>
+
+    <!-- ============ DATA MODEL ============ -->
+    <section id="data-model">
+      <span class="section-num">10</span>
+      <h2>Data model</h2>
+      <p class="lede">Four tables, one loose join.</p>
+
+      <div class="er">
+        <div class="er-table">
+          <div class="hd">profiles</div>
+          <ul>
+            <li><b>id</b> uuid → auth.users</li>
+            <li>email, github_username</li>
+            <li>plan: free · pro · team · enterprise</li>
+            <li>stripe_customer_id</li>
+          </ul>
+        </div>
+        <div class="er-table">
+          <div class="hd">github_installations</div>
+          <ul>
+            <li><b>id</b> bigint (GitHub's installation id)</li>
+            <li>user_id — github login, joined loosely to profiles.github_username</li>
+            <li>account_login, account_type, suspended</li>
+          </ul>
+        </div>
+        <div class="er-table">
+          <div class="hd">monitored_repos</div>
+          <ul>
+            <li><b>id</b> uuid</li>
+            <li><span class="fk">installation_id</span> → github_installations, cascade delete</li>
+            <li>repo_full_name (unique), repo_id (unique)</li>
+            <li>enabled, block_on_error</li>
+          </ul>
+        </div>
+        <div class="er-table">
+          <div class="hd">pr_checks</div>
+          <ul>
+            <li><b>id</b> uuid</li>
+            <li>repo_full_name — matched by string, no FK</li>
+            <li>pr_number, sha, branch</li>
+            <li>status: passed · warned · failed · no_file</li>
+            <li>errors, warnings, checked_at</li>
+          </ul>
+        </div>
+      </div>
+
+      <p><code class="cite">pr_checks</code> joins to <code class="cite">monitored_repos</code> by <code class="cite">repo_full_name</code> rather than a foreign key — looser coupling, but it means a repo rename silently orphans historical check rows instead of failing loudly. <code class="cite">profiles</code> is the only table with a real RLS policy scoped to <code class="cite">auth.uid()</code>; the other three rely entirely on being accessed only through the service-role client, which is the gap flagged in <a href="#decisions">Decisions</a>.</p>
+    </section>
+
+    <!-- ============ ROADMAP ============ -->
+    <section id="roadmap">
+      <span class="section-num">11</span>
+      <h2>Expansion roadmap</h2>
+      <p class="lede">What's next, ordered by how directly the codebase already points at it.</p>
+
+      <div class="roadmap">
+        <div class="road-item">
+          <span class="idx">01</span>
+          <div><h4>AI-authored DESIGN.md editor</h4><p>Bot comments already link an <code class="mono">/editor</code> route ("describe your brand, AI generates the file"), and <code class="mono">@anthropic-ai/sdk</code> is already a dependency. The route itself isn't built yet.</p><span class="evidence">comment.ts · editorUrl</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">02</span>
+          <div><h4>Stripe billing</h4><p><code class="mono">profiles.plan</code> and <code class="mono">stripe_customer_id</code> already exist in the schema; "block merge on error" is already pitched as a Pro feature in the README. Needs Checkout + a billing webhook that flips <code class="mono">plan</code>.</p><span class="evidence">supabase-schema.sql</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">03</span>
+          <div><h4>One-click fix apply</h4><p><code class="mono">comment.ts</code> already renders GitHub suggestion blocks and paste-ready YAML patches for fixable findings. Next step is a Check Run "requested action" that opens a commit directly instead of leaving the developer to copy-paste.</p><span class="evidence">comment.ts · fixesSection()</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">04</span>
+          <div><h4>Broader token-source support</h4><p>Today only <code class="mono">:root</code> CSS variables are scanned, from a hardcoded list of candidate paths. Natural extensions: Tailwind theme config, CSS-in-JS themes, or the W3C Design Tokens / Style Dictionary JSON format — plus a repo-level config file instead of a guess-list.</p><span class="evidence">CSS_TOKEN_PATH_CANDIDATES</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">05</span>
+          <div><h4>Per-repo settings UI</h4><p><code class="mono">block_on_error</code> and <code class="mono">enabled</code> already exist as columns but have no dashboard control — currently only settable by hand in Postgres.</p><span class="evidence">monitored_repos schema</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">06</span>
+          <div><h4>Durable retry / dead-letter queue</h4><p>A thrown error mid-handler returns a 500 with no queued retry of DriftGuard's own; <code class="mono">pr_checks</code> only gets a row on full success. A real queue would make partial failures recoverable and auditable.</p><span class="evidence">webhook/route.ts</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">07</span>
+          <div><h4>Team / org ownership model</h4><p>The schema is single-user (<code class="mono">user_id</code> as a raw GitHub login). Real multi-seat teams need a <code class="mono">teams</code> / <code class="mono">memberships</code> table and shared repo ownership.</p><span class="evidence">supabase-schema.sql</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">08</span>
+          <div><h4>Standalone CLI</h4><p>The linter package has zero I/O dependencies already — a thin <code class="mono">driftguard lint</code> CLI would bring the same checks to GitLab, Bitbucket, or any pipeline that isn't GitHub Actions.</p><span class="evidence">packages/linter has no fs/network calls</span></div>
+        </div>
+        <div class="road-item">
+          <span class="idx">09</span>
+          <div><h4>Tighten RLS</h4><p>Replace the <code class="mono">using (true)</code> policies on <code class="mono">github_installations</code>, <code class="mono">monitored_repos</code>, and <code class="mono">pr_checks</code> with explicit service-role-only checks, so a leaked anon key can't read installation or check data.</p><span class="evidence">supabase-schema.sql</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ INTERVIEW ============ -->
+    <section id="interview">
+      <span class="section-num">12</span>
+      <h2>Interview cheat sheet</h2>
+      <p class="lede">The questions this project actually invites, with the short version of each answer. Expand for the long version.</p>
+
+      <details class="qa">
+        <summary>Walk me through what happens when someone opens a PR.</summary>
+        <div class="a"><p>Signature verified → installation token fetched → pending status set → DESIGN.md pulled from the PR's head branch → parsed and linted structurally → cross-checked against the repo's actual CSS variables → comment upserted and commit status set concurrently → check result logged. Full breakdown in <a href="#dataflow">PR check — data flow</a>.</p></div>
+      </details>
+      <details class="qa">
+        <summary>How do you stop someone from spoofing a webhook?</summary>
+        <div class="a"><p>Every request's raw body is HMAC-SHA256'd with the app's webhook secret and compared to the <span class="mono">x-hub-signature-256</span> header using <span class="mono">crypto.timingSafeEqual</span> — a constant-time comparison so the check itself can't leak the secret through response-time differences. Anything that fails is rejected with 401 before the JSON is even parsed.</p></div>
+      </details>
+      <details class="qa">
+        <summary>How do you avoid commenting twenty times on one PR?</summary>
+        <div class="a"><p>Every bot comment carries a hidden HTML marker. Before posting, the handler searches existing comments for that marker and updates it in place if found, instead of creating a new one — the same idiom Dependabot and Renovate use.</p></div>
+      </details>
+      <details class="qa">
+        <summary>Why two separate Supabase clients?</summary>
+        <div class="a"><p>One is cookie-scoped and respects Row Level Security — used anywhere a real user is making the request (the dashboard). The other uses the service-role key and bypasses RLS entirely — used only in trusted server code like the webhook handler, and never constructed anywhere that could run in a browser.</p></div>
+      </details>
+      <details class="qa">
+        <summary>Why implicit OAuth instead of PKCE?</summary>
+        <div class="a"><p>PKCE was the first attempt and is the better default, but its <span class="mono">code_verifier</span> cookie didn't survive the redirect from Supabase's domain back to the app's Vercel domain, regardless of how it was stored. Implicit flow sidesteps that entirely by returning the token in the URL fragment instead of an exchange code — accepted as a deliberate trade-off, not a default. See <a href="#auth-flow">Auth flow</a> for the honest version of this trade-off.</p></div>
+      </details>
+      <details class="qa">
+        <summary>What's the actual novel technical piece here?</summary>
+        <div class="a"><p>Not the YAML parsing — it's reconciling two independent sources of truth (a declared spec and shipped CSS) by normalizing both into one canonical token shape and diffing them. That's the same core technique behind schema-drift and infra-drift tooling generally.</p></div>
+      </details>
+      <details class="qa">
+        <summary>What's the biggest scaling risk right now?</summary>
+        <div class="a"><p>The whole fetch → lint → comment sequence runs synchronously inside one Vercel serverless function invocation per webhook delivery. Fine at current volume; a repo with very large PR traffic or slow GitHub API responses could hit function timeouts. The fix is a queue plus a background worker, which would also solve the "failed handler leaves no audit row" gap.</p></div>
+      </details>
+      <details class="qa">
+        <summary>Why does the linter live in its own package instead of just src/lib?</summary>
+        <div class="a"><p>Because it has two real consumers with different runtimes — the Next.js webhook handler (Node, server) and the VS Code extension (Node, but a completely separate process and packaging pipeline). Keeping it dependency-free and side-effect-free is what makes it importable from both without dragging in Next.js or Octokit.</p></div>
+      </details>
+    </section>
+
+    <a class="backtotop" href="#overview">↑ Back to top</a>
+
+    <footer>
+      Notes compiled from a read-through of <a href="https://github.com/adarsh07ronal/driftguard" target="_blank" rel="noopener">adarsh07ronal/driftguard</a> for interview preparation.
+    </footer>
+  </main>
+</div>
