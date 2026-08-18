@@ -1,4 +1,7 @@
-**
-!out/extension.js
-!icon.png
-!package.json
+.vscode/**
+.vscode-test/**
+src/**
+**/*.map
+**/tsconfig.json
+node_modules/**
+esbuild.js

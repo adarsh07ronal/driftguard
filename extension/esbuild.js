@@ -4,7 +4,7 @@ esbuild
   .build({
     entryPoints: ["src/extension.ts"],
     bundle: true,
-    outfile: "out/extension.js",
+    outfile: "dist/extension.js",
     platform: "node",
     target: "node18",
     format: "cjs",

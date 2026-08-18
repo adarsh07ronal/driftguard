@@ -14,7 +14,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Linters", "Other"],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:markdown"
   ],
@@ -51,12 +51,12 @@
     "build": "tsc -p tsconfig.json",
     "bundle": "node ./esbuild.js",
     "watch": "tsc -p tsconfig.json --watch",
-    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\""
-  },
-  "dependencies": {
-    "@driftguard/linter": "*"
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "vsce:package": "vsce package --no-dependencies",
+    "vsce:publish": "vsce publish --no-dependencies"
   },
   "devDependencies": {
+    "@driftguard/linter": "*",
     "@types/node": "^20",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.23.0",
