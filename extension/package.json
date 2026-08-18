@@ -2,8 +2,8 @@
   "name": "driftguard-vscode",
   "displayName": "DriftGuard",
   "description": "Lint your DESIGN.md as you type. WCAG contrast, broken token refs, missing typography, section order.",
-  "version": "0.1.0",
-  "publisher": "driftguard",
+  "version": "0.1.1",
+  "publisher": "driftgaurd",
   "private": true,
   "icon": "icon.png",
   "engines": {
