@@ -12,6 +12,24 @@
 
 ---
 
+## Screenshots
+
+**The check every PR gets** — this is the app's marketing page rendering the exact output of `buildPRComment()`, the same function that posts to real pull requests:
+
+![PR comment showing DESIGN.md lint findings](docs/screenshots/pr-comment-check.png)
+
+**Marketing homepage**, run locally via `npm run dev`:
+
+![designmd marketing homepage](docs/screenshots/marketing-homepage.png)
+
+**Install flow** — `/install`:
+
+![Install designmd page](docs/screenshots/install-page.png)
+
+*Captured from a local dev build (`npm run dev`) — the hosted production deployment sits behind Vercel's deployment protection, so these are pulled from the same source running locally rather than the live URL.*
+
+---
+
 ## Local setup
 
 ```bash
